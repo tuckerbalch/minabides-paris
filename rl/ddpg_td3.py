@@ -1,8 +1,7 @@
-from collections import namedtuple
-from market import TradingAgent
+from market.agent import TradingAgent
 import numpy as np
 from statistics import mean
-from util import clamp, ft
+from util import Box, ReplayBuffer, clamp, ft
 
 # Torch and RL-specific imports.
 import torch
@@ -13,47 +12,6 @@ from torch.nn import functional as F
 # Environmental market features are configurable.
 actor_feat = 2
 
-# Simple named tuple type for replay samples.
-ReplaySample = namedtuple('ReplaySample', ['observations', 'actions', 'next_observations', 'rewards'])
-
-
-class Box():
-    """ A very simple continuous space in the style of the gymnasium Box.
-        Does not support unbounded spaces. """
-    def __init__(self, low, high):
-        self.low, self.high = low, high
-        self.shape = self.low.shape
-
-    def sample(self):
-        """ Uniformly randomly samples from this bounded space. """
-        return np.random.uniform(low=self.low, high=self.high, size=self.shape)
-
-
-class ReplayBuffer():
-    """ A very simple replay buffer in the style of stable-baselines3. """
-    def __init__(self, maxlen, obs_shape, act_shape):
-        self.s = np.empty((maxlen, *obs_shape), dtype=np.float32)
-        self.a = np.empty((maxlen, *act_shape), dtype=np.float32)
-        self.s_prime = np.empty((maxlen, *obs_shape), dtype=np.float32)
-        self.r = np.empty((maxlen), dtype=np.float32)
-
-        self.n = 0
-        self.full = False
-
-    def add(self, s, a, s_prime, r):
-        self.s[self.n] = np.array(s)
-        self.a[self.n] = np.array(a)
-        self.s_prime[self.n] = np.array(s_prime)
-        self.r[self.n] = np.array(r)
-
-        self.n = self.n + 1 % self.s.shape[0]
-        if self.n == 0: self.full = True
-
-    def sample(self, num_samples):
-        idx = np.random.randint(0, self.s.shape[0] if self.full else self.n, size=num_samples)
-        return ReplaySample(torch.tensor(self.s[idx]), torch.tensor(self.a[idx]),
-                            torch.tensor(self.s_prime[idx]), torch.tensor(self.r[idx]))
-
 
 class ActorCritic(nn.Module):
     """ Defines the actor and critic networks for a DDPG/TD3 agent. """
@@ -62,6 +20,8 @@ class ActorCritic(nn.Module):
         self.critic, self.scale = critic, scale
         actor_obs_shape, env_obs_shape = (actor_feat,), (obs_space.shape[0],obs_space.shape[1]-actor_feat)
 
+        fc_in = np.prod(actor_obs_shape) + (args.embed if args.encoder == "lstm" else args.levels*2)
+
         # Features up to actor_feat are internal state repeated along seq dim.
         # Remaining features are environmental, sequenced, and meant for LSTM embedding.
 
@@ -69,8 +29,7 @@ class ActorCritic(nn.Module):
         # Critic outputs one scalar.  Actor outputs act_shape.
         act_shape = np.prod(act_space.shape)
 
-        self.fc1 = nn.Linear(np.prod(actor_obs_shape) + args.embed + (act_shape if critic else 0),
-                             args.netsize)
+        self.fc1 = nn.Linear(fc_in + (act_shape if critic else 0), args.netsize)
         self.fc2 = nn.Linear(args.netsize, args.netsize)
         self.fc3 = nn.Linear(args.netsize, 1 if critic else act_shape)
 
@@ -79,17 +38,22 @@ class ActorCritic(nn.Module):
 
         # Expected input (batch x seq_len x n_features).
         # Expected output (batch x seq_len).
-        self.lstm_feat_embed = nn.LSTM(input_size = np.array(env_obs_shape[1:]).prod(),
+        if args.encoder == "lstm":
+            self.lstm = nn.LSTM(input_size = np.array(env_obs_shape[1:]).prod(),
                                 hidden_size = args.embed, batch_first = True)
 
     def forward(self, x, a=None):
-        act_obs, env_obs = x[:,0,:actor_feat], x[:,:,actor_feat:]
-        x,_ = self.lstm_feat_embed(env_obs)
+        if hasattr(self, 'lstm'):
+            act_obs, env_obs = x[:,0,:actor_feat], x[:,:,actor_feat:]
+            x,_ = self.lstm(env_obs)
 
-        # Take only last sequence output as input to FC.  Repeat actor internal state.
-        # Critic network requires action input.  Actor does not.
-        if self.critic: x = F.relu(self.ln1(self.fc1(torch.cat((act_obs, x[:,-1,:], a), dim=1))))
-        else: x = F.relu(self.ln1(self.fc1(torch.cat((act_obs, x[:,-1,:]), dim=1))))
+            # Take only last sequence output as input to FC.  Repeat actor internal state.
+            # Critic network requires action input.  Actor does not.
+            if self.critic: x = F.relu(self.ln1(self.fc1(torch.cat((act_obs, x[:,-1,:], a), dim=1))))
+            else: x = F.relu(self.ln1(self.fc1(torch.cat((act_obs, x[:,-1,:]), dim=1))))
+        else:
+            if self.critic: x = F.relu(self.ln1(self.fc1(torch.cat((x[:,-1,:], a), dim=1))))
+            else: x = F.relu(self.ln1(self.fc1(x[:,-1,:])))
 
         x = F.relu(self.ln2(self.fc2(x)))
 
@@ -118,7 +82,8 @@ class DDPGAgent(TradingAgent):
         # Store parameters that are not part of args or are required by simulation on agent.
         self.levels = args.levels
         self.obs_space, self.act_space = Box(obs_low, obs_high), Box(act_low, act_high)
-        self.td3 = True if args.rlagent.upper() == "TD3" else False
+        self.td3 = True if args.rlagent == "td3" else False
+        if self.td3: self.type = "TD3Agent"                     # fix up logged agent type for TD3
         self.action_scale = torch.tensor((self.act_space.high - self.act_space.low) / 2.0, dtype=torch.float32)
         self.rb = ReplayBuffer(maxlen = args.rbuf, obs_shape = self.obs_space.shape, act_shape = self.act_space.shape)
     
@@ -144,7 +109,7 @@ class DDPGAgent(TradingAgent):
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=args.lr)
     
         # Initialize attributes.
-        self.eval, self.obs, self.act = False, None, None
+        self.eval, self.obs, self.act, self.action_cost = False, None, None, 0.0
         self.episode, self.episode_step, self.global_step = -1, -1, -1
         self.print_every_n_policy_updates = int(20/args.polfreq)
         self.learn_start_step = args.startstep
@@ -174,8 +139,12 @@ class DDPGAgent(TradingAgent):
             if old_pv is None or self.obs is None or self.act is None: r = None
             else:
                 # Immediate P/L as portfolio percent change * 100.  (HFT changes are small.)
-                r = 100 * (((self.portval + offset) / (old_pv + offset)) - 1)
-                self._debug(f"a[0] = {self.act[0].item():.4f}, r = {r:.4f} at {ft(ct)}.")
+                # Action cost is a training penalty, "real" transaction costs handled elsewhere.
+                orig_r = 100 * (((self.portval + offset) / (old_pv + offset)) - 1)
+                #self._debug(f"a[0] = {self.act[0].item():.4f}, r = {r:.4f} at {ft(ct)}.")
+                r = orig_r - self.action_cost
+                if self.args.rldebug: print(f"h = {self.obs[0,0]:.4f}, a = {self.act}, "
+                                            f"orig r = {orig_r:.4f}, r = {r:.4f} at {ft(ct)}.")
 
                 self.total_reward += r
 
@@ -215,13 +184,18 @@ class DDPGAgent(TradingAgent):
 
             # Yield the results of the action.
             curr = self.held + self.open              # Shares owned + requested.
-            a = int(self.args.shares * actions[0])         # The trade quantity action.
+            self.action_cost = abs(float(actions[0] * 0.01)) # Reward penalty for action.
+            if self.args.rldebug: print(f"cost is {self.action_cost} for action {actions[0]}")
+            a = int(self.args.trade * actions[0])         # The trade quantity action.
             prop = curr + a                           # Proposed shares after action.
 
             # Adjust action so proposed shares fall within holding limits.
             if prop > self.args.shares: a = self.args.shares - curr
             elif prop < -self.args.shares: a = -self.args.shares - curr
 
+            # Record transaction cost, if any.
+            trans_cost = self.args.trans_cost * abs(a) * (self.ask if a >= 0 else self.bid)
+            self.cost(trans_cost)
             yield self.place(a)
 
 
@@ -295,16 +269,19 @@ class DDPGAgent(TradingAgent):
                               f"{actor_loss.item():.4f}, ttl_rwd: {self.total_reward:.4f}")
 
 
-    def new_day (self, start, evaluate=False):
+    def reset (self):
         """ Reset any attributes that should not carry across episodes/days. """
-        self.random_start(start)
 
         # Increment episode and reset losses and total rewards for reporting purposes.
         self.total_reward = 0
         self.episode += 1
         self.qf_losses, self.act_losses = [], []
 
-        # Update attributes passed as parameters.
-        self.eval = evaluate
+    def report_loss (self):
+        """ Returns the episode step, global step, actor loss, and critic loss for logging. """
+        # Note: this RL agent may have two critics, but both are combined into one loss measure.
+        act_loss = np.nan if len(self.act_losses) == 0 else self.act_losses[-1]
+        qf_loss = np.nan if len(self.qf_losses) == 0 else self.qf_losses[-1]
+        return self.episode, self.episode_step, self.global_step, act_loss, qf_loss
 
 
