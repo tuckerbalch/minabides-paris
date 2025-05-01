@@ -6,7 +6,7 @@
     Arguments collected in this program are universal to all experiments.
     Experiments may also allow/require additional arguments in ./experiments. """
 
-import argparse, importlib
+import argparse, importlib, os, time
 from random import randint
 from util import set_manual_seed
 
@@ -21,13 +21,18 @@ parser.add_argument('--exp_help', action='store_true',
 
 # Basic arguments for all experiments.
 basic_group = parser.add_argument_group('Basic arguments')
-basic_group.add_argument('--tag', default='run', metavar='RUN_TAG',
-                         help='Tag for use in output and log files to uniquely identify this run.')
+basic_group.add_argument('--tag', default='experiment', metavar='USER_TAG',
+                         help='User-supplied tag to identify this experiment or batch.')
+basic_group.add_argument('--runtag', default='experiment', metavar='RUN_TAG',
+                         help='Optional tag for individual run within batch.')
+basic_group.add_argument('--ts', default=None, metavar='TIMESTAMP', help="Optional timestamp for batch.")
 basic_group.add_argument('--seed', type=int, default=-1, help="Optional manual seed for PRNG.")
 basic_group.add_argument('--datadir', default="./data/lobster", help="Historical data directory.")
-basic_group.add_argument('--trips', type=int, default=5, metavar='INT',
-                        help='Number of times to train learning agents on each date before'
-                             'validating/testing.')
+basic_group.add_argument('--trips', type=int, default=1, metavar='INT',
+                         help='Number of times to train learning agents on each date before'
+                              'validating/testing.')
+basic_group.add_argument('--fixed', action='store_true',
+                         help='Retain first episode random start time offset across episodes.')
 
 # Exchange-related arguments for all experiments.
 exch_group = parser.add_argument_group('Exchange-related arguments')
@@ -37,7 +42,7 @@ exch_group.add_argument('--seqlen', type=int, default=20, metavar='INT',
                         help='Length of historical sequence to offer agents in LOB messages.')
 exch_group.add_argument('--lobintvl', type=float, default=5e9, metavar='FLOAT',
                         help='Interval between LOB snapshots for history (ns).')
-exch_group.add_argument('--levels', type=int, default=5, metavar='INT',
+exch_group.add_argument('--levels', type=int, default=10, metavar='INT',
                         help='Levels of bid/ask volume in LOB snapshot history.')
 
 # Date-related arguments for all experiments.
@@ -71,6 +76,12 @@ time_group.add_argument('--test_end', type=float, default=12.00, metavar='FLOAT'
                         help='End time for the simulation on each date during testing.')
 
 args, exp_args = parser.parse_known_args()
+
+# Create a results subdirectory for the experiment with the tag and a unique timestamp.
+# For batches, timestamp can be passed in to ensure all files flow to one place.
+run_ts = args.ts if args.ts is not None else str(int(time.time()))
+args.result_dir = f"results/{args.tag}_{run_ts}"
+os.makedirs(args.result_dir, exist_ok=True)
 
 # Transform time arguments from fractional hours (easier to specify on command line)
 # to nanoseconds since midnight (what the simulation requires).
