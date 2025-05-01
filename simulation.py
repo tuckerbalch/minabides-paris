@@ -20,7 +20,7 @@ from time import time, time_ns
 
 # Project-specific imports.
 from history import History
-from market import TradingAgent
+from market.agent import TradingAgent
 from util import ft, latency, TeeOutput
 
 
@@ -40,6 +40,7 @@ def schedule(dt=None, msg=None, aid=None, a=None, msgid=None):
     hq.heappush(schedule.pq, (dt, msgid, aid, msg))
 
 
+
 def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, args):
     """ Run simulation of date from agent start time to simulation end time.
 
@@ -48,8 +49,30 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
 
         Mode can be train, test_is, test_val, or test_oos.  Args is full command line. """
 
+    def log_header (log, extra_cols):
+        """ Inner log helper method to generate header row for standard plus extra columns. """
+        log.write((",".join([x for x in args.__dict__] +
+                        ['sim','model','trip','date','mode','agent','aid'] +
+                        extra_cols) + "\n").encode('utf-8'))
+
+    def log_write (log, agent, extra_cols):
+        """ Inner log helper method for various logs.  Expects log reference,
+            args, agent reference, extra column values as list. """
+        log.write((",".join([str(x) for x in list(args.__dict__.values()) +     # config args
+                            [sim, model, trip, date, mode] +                    # standard
+                            [agent.type, agent.aid] +                           # agent specific
+                            extra_cols]) + "\n").encode('utf-8'))               # extra columns
+
     ft.date_ts = datetime.strptime(date, '%Y-%m-%d').timestamp()
     print(f"Starting simulation: model {model} on {date}, trip {trip}, mode {mode}.")
+
+    # Initialize log header on first simulation.
+    if sim == 0:
+        log_header(simulate.book_log,  ['time'] + [ f'{a}_{i}_{p}' for i in range(args.levels)
+                                                    for a in ['ask','bid'] for p in ['p','q'] ] +
+                                       ['trade_price','trade_quantity'])
+        log_header(simulate.loss_log,  ['episode','episode_step','global_step','actor_loss','critic_loss'])
+        log_header(simulate.perf_log,  ['mps','profit'])
 
     # Immutable system properties.
     ex_delay = 1            # currently, exchange never falls behind
@@ -62,28 +85,29 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
 
     # Call the new_day method on every agent in today's run.
     for a in ag:
-        a.new_day(ag_start, evaluate=True if 'test' in mode else False)
+        a.new_day(ag_start, evaluate=True if 'test' in mode else False, fixed=args.fixed)
 
     ### Create data structures that start empty each simulated day.
     pq = []
     schedule.pq = pq
     msg_from_ag = { i:0 for i in range(len(ag)) }
     hist = History(args.symbol, date, args.sim_start, args.datadir)
+    cachefile = os.path.join(args.datadir, "cached", f"cache_{args.symbol}_{date}_{ag_start}_"
+                                                     f"{args.lobintvl}_{args.seqlen}_{args.levels}")
 
     # If no history cache file, reconstruct to agent start time and save for future performance.
-    cachefile = glob.glob(os.path.join(args.datadir, "cached", f"cache_{args.symbol}_{date}_{ag_start}"))
-    if len(cachefile) == 0:
+    if not os.path.isfile(cachefile):
         print (f"Reconstructing history to {ft(ag_start)}")
-        hist.reconstruct(ag_start, args)
+        hist.reconstruct(ag_start, cachefile, args)
 
-    cachefile = glob.glob(os.path.join(args.datadir, "cached", f"cache_{args.symbol}_{date}_{ag_start}"))
-    if len(cachefile) == 0:
+    if not os.path.isfile(cachefile):
         print ("History reconstruction failed.")
         exit()
     else: print ("Reconstruction successful.")
 
     # Load reconstructed orderbook and fundamental, and fast-forward history.
-    with open(cachefile[0], 'rb') as cache: book = pickle.load(cache)
+    with open(cachefile, 'rb') as cache: book = pickle.load(cache)
+    book.args = args
     ag[0].book[args.symbol] = book
     hist.fast_forward(ag_start)
     hist.fund = book.fund
@@ -159,13 +183,23 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
         # Delay the agent that just acted according to its total processing time.
         at[rcp] = ct + (ex_delay if rcp == 0 else time_ns() - wc)
 
+        # Allow the agent to record training loss if it wishes.
+        if msg['type'] == 'lob':
+            extra_cols = ag[rcp].report_loss()
+            if extra_cols is not None: log_write(simulate.loss_log, ag[rcp], list(extra_cols))
+
+        # After processing order messages to the exchange, allow order book logging if needed.
+        if rcp == 0 and 'order' in msg:
+            extra_cols = ag[rcp].book[args.symbol].log_book()
+            if extra_cols is not None: log_write(simulate.book_log, ag[rcp], extra_cols)
 
     # Get wallclock elapsed time for performance. 
     wcElapsed = time_ns() - wcStart
 
     elapsed = wcElapsed / 1e9
+    mps = msgid / elapsed
     # Could count queued or dequeued messages.  Counting dequeued.
-    print (f"Processed {msgid} messages in {elapsed} seconds.  MPS: {msgid / elapsed}")
+    print (f"Processed {msgid} messages in {elapsed} seconds.  MPS: {mps}")
 
     # Close history file.
     hist.close()
@@ -184,10 +218,7 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
 
         profit = a.finalize_episode(ct, { 'type': 'lob', 'snap': fin_snap,
                                           'fund': fin_fund, 'hist': fin_hist })
-
-        simulate.log.write((",".join([str(x) for x in list(args.__dict__.values()) +     # config args
-                                     [sim, model, trip, date, mode, msgid/elapsed] +     # standard
-                                     [a.type, a.aid, profit]]) + "\n").encode('utf-8'))  # agent perf
+        log_write(simulate.perf_log, a, [mps, profit])
 
         # Also collect profit by agent type.
         tag = a.type + a.tag            # tag allows distinguishing flavors of same agent type
@@ -209,19 +240,15 @@ def run_experiment(base_agents, learning_agents, args):
         Base agents are present every day.  Learning agents are trained
         one at a time, round-robin, before being validated/tested. """
     
-    # Create output and log files with a unique name.
-    run_ts = time()
-    
-    file = args.tag + "_" + str(int(run_ts))
-    sys.stdout = TeeOutput("output/" + file)
-    simulate.log = open("log/" + file, "wb", buffering=0)
+    # Create loss, out, and perf subdirectories within the batch-specific results directory.
+    for sub in ['book','loss','out','perf']:
+        os.makedirs(f"{args.result_dir}/{sub}", exist_ok=True)
+    sys.stdout = TeeOutput(f"{args.result_dir}/out/{args.runtag}")
+    simulate.book_log = open(f"{args.result_dir}/book/{args.runtag}", "wb", buffering=0)
+    simulate.loss_log = open(f"{args.result_dir}/loss/{args.runtag}", "wb", buffering=0)
+    simulate.perf_log = open(f"{args.result_dir}/perf/{args.runtag}", "wb", buffering=0)
     
     print("Random seed:", args.seed)
-
-    # Initialize log file header row.
-    simulate.log.write((",".join([x for x in args.__dict__] +
-                                 ['sim','model','trip','date','mode','mps'] +
-                                 ['agent','aid','profit']) + "\n").encode('utf-8'))
 
     ### NO LEARNING AGENTS
 
@@ -272,5 +299,7 @@ def run_experiment(base_agents, learning_agents, args):
 
     print (f"All done: {args.tag}.")
 
-    simulate.log.close()
+    simulate.book_log.close()
+    simulate.loss_log.close()
+    simulate.perf_log.close()
 
