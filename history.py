@@ -82,7 +82,7 @@ class History:
 
             self.next = self.get_next()
 
-    def reconstruct (self, et, args):
+    def reconstruct (self, et, cachefile, args):
         """ Reconstructs LOB to requested end time and saves it for future fast-forwarding. """
         book = OrderBook(self.symbol, args)
     
@@ -94,6 +94,8 @@ class History:
             if n[1] == 4: book.fund = n[4]
             o = Order(-1, n[3] if n[5] > 0 else -n[3], self.symbol, n[4], oid = n[2])
     
+            if n[1] in [1,2,3,4]: book.ct = n[0]    # update book's last order time
+
             if n[1] == 1:   book.enter(o)
             elif n[1] == 2: book.reduce(o)
             elif n[1] == 3: book.cancel(o)
@@ -101,8 +103,7 @@ class History:
     
             self.next = self.get_next()
 
-        with open(os.path.join(self.data_dir, "cached", f"cache_{self.symbol}_{self.date}_{et}"), 'wb') as out:
-            pickle.dump(book, out, pickle.HIGHEST_PROTOCOL)
+        with open(cachefile, 'wb') as out: pickle.dump(book, out, pickle.HIGHEST_PROTOCOL)
     
     def close (self):
         """ Closes the history file.  Call at end of each day. """
