@@ -1,7 +1,5 @@
 from copy import deepcopy
 from dataclasses import dataclass
-import csv, glob, os, pickle
-from util import ft
 
 @dataclass
 class OrderLevel:
@@ -46,6 +44,8 @@ class OrderBook:
         self.book = { 'bid': [], 'ask': [] }    # full order book view (levels of individual orders)
         self.snap = { 'bid': [], 'ask': [] }    # snapshot view (levels of aggregate price, quantity)
         self.snap_hist = []                     # history of recent snapshots at some interval
+
+        self.book_to_log, self.last_trade = None, [None, None]
 
 
     def execute(self, order):
@@ -99,6 +99,9 @@ class OrderBook:
         # Set filled price as limit price of incumbent (matched) order.
         match.fill = match.limit
     
+        # If we made it here, there was a transaction, so log it.
+        self.last_trade = [match.fill, abs(match.quantity)]
+
         # Update snapshot history if it is time.
         self.update_snaphist()
 
@@ -202,17 +205,22 @@ class OrderBook:
     def snapview(self, levels=10):
         """ Quickly extract a certain number of levels from the LOB snapshot, which
             is always kept up to date by internal trigger logic. """
+
         return { 'bid': self.snap['bid'][:levels], 'ask': self.snap['ask'][:levels] }
 
     def update_snaphist(self):
         """ If LOB interval has passed, appends a current snapshot to the LOB history,
-            then truncates it if necessary. """
+            then truncates it if necessary.  Also drops the current snapshot into
+            the book log file. """
+
         if self.ct - self.last_snap_hist > self.args.lobintvl:
             self.clearexp()     # Expired orders should not make it into the history.
             self.snap_hist.append([x.quantity for x in self.snap['bid'][:self.args.levels]] +
                                   [x.quantity for x in self.snap['ask'][:self.args.levels]])
             self.snap_hist = self.snap_hist[-self.args.seqlen:]
             self.last_snap_hist = self.ct
+
+            self.book_to_log = self.snaplog()
     
     def summary(self, levels=10):
         """ Build a pretty-printed string showing requested levels of the LOB. """
@@ -221,15 +229,21 @@ class OrderBook:
         for b in self.snap['bid'][:levels]: s += f"{b.quantity:6d} {b.price/100:8.2f}\n"
         return s
 
-    def debug(self, levels=10):
-        """ Build a programmatically-parsable string showing requested levels of the LOB. """
-        out = []
+    def snaplog(self):
+        """ Return the time plus the configured number of order book levels (price and quantity). """
+        out = [str(self.ct)]
         a,b = self.snap['ask'], self.snap['bid']
 
-        for i in range(levels):
-            if i < len(a): out.extend([str(a[i].price)+"00",str(a[i].quantity)])
-            else: out.extend(["9999999999","0"])
-            if i < len(b): out.extend([str(b[i].price)+"00",str(b[i].quantity)])
-            else: out.extend(["-9999999999","0"])
-        return ",".join(out)
+        for i in range(self.args.levels):
+            out.extend([str(a[i].price),str(a[i].quantity)] if i < len(a) else ["nan","nan"])
+            out.extend([str(b[i].price),str(b[i].quantity)] if i < len(b) else ["nan","nan"])
+        return out
+
+    def log_book(self):
+        """ Return the order book snapshot waiting to be logged, if any. """
+        if self.book_to_log is None: return None
+
+        to_log = self.book_to_log + self.last_trade
+        self.book_to_log = None
+        return to_log
 
