@@ -29,7 +29,9 @@ def experiment(base_args, exp_args):
     import argparse
 
     # Custom imports from this project.
-    import market as m
+    from market.background import MarketMakerAgent, MomentumAgent, NoiseAgent, \
+                                  OrderBookImbalanceAgent, ValueAgent
+    from market.exchange import ExchangeAgent
     from simulation import run_experiment
 
     # This experiment requires no additional command-line parameters.
@@ -37,12 +39,13 @@ def experiment(base_args, exp_args):
 
     # Configure the base agents for the experiment.  Exchange must be agent zero.
     # "Base" agents are those always present for this experiment.
-    base_ag = [ m.ExchangeAgent([args.symbol], args) ] + \
-              [ m.MarketMakerAgent(args.symbol, 1e1, 2e8, 100) ] + \
-              [ m.MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(10)] + \
-              [ m.NoiseAgent(args.symbol, 12e6, 10e9) for i in range(20)] + \
-              [ m.OrderBookImbalanceAgent(args.symbol, 1e3, 2e8, 100, 50) for i in range(5)] + \
-              [ m.ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(10)]
+    base_ag = [ ExchangeAgent([args.symbol], args) ]
+    #base_ag = [ ExchangeAgent([args.symbol], args) ] + \
+              #[ MarketMakerAgent(args.symbol, 1e1, 2e8, 100) ] + \
+              #[ MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(10)] + \
+              #[ NoiseAgent(args.symbol, 12e6, 10e9) for i in range(20)] + \
+              #[ OrderBookImbalanceAgent(args.symbol, 1e3, 2e8, 100, 50) for i in range(5)] + \
+              #[ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(10)]
 
     # This experiment uses no learning agents.
     learn_ag = []
