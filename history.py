@@ -23,7 +23,11 @@ class History:
 
         # Open file, read first record, keep as next.  File stays open.  Glob should match one file.
         fileglob = f"{symbol}_{date}_*_message_0.csv"
-        self.file = open(glob.glob(os.path.join(data_dir, fileglob))[0], newline="")
+        files = glob.glob(os.path.join(data_dir, fileglob))
+        if len(files) == 0:
+            print (f"Could not find requested data file: {os.path.join(data_dir, fileglob)}")
+            exit()
+        self.file = open(files[0], newline="")
         self.data = csv.reader(self.file)
 
         self.next = self.get_next()
