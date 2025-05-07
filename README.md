@@ -86,8 +86,25 @@ limit order book is reconstructed in the exchange.
 The minabides project, including its code, comments, and documentation, was produced entirely without the use of any LLM, Copilot, advanced auto-completion, or other Generative AI.  (It was written in vi on a server running Rocky Linux.)
 
 ## Example output
-Here are a few examples of the tables and images minabides can produce out of the box:
+minabides provides builtin descriptive statistics and plots.  Below are some examples.
+
+### Order book visualization
+Left: Visualization of depth 100 order book at one second interval over one hour.  Right: Depth 10 at one millisecond interval over one minute.  Cool colors are bids, warm colors are asks, and the black line is the last transaction price at each time.
+
 ![100 order book levels over one hour at one second interval.](https://tildesites.bowdoin.edu/~d.byrd/images/replay_100_small.png)
 ![10 order book levels over one minute at one millisecond interval.](https://tildesites.bowdoin.edu/~d.byrd/images/replay_10_small.png)
+
+### Learning loss visualization
+Plot showing the actor and critic loss convergence for a TD3-based trading agent.
+
 ![TD3 actor-critic loss convergence.](https://tildesites.bowdoin.edu/~d.byrd/images/loss_small.png)
+
+### Complex distribution plots
+The included stats.py program allows parameters for breaking out performance results in many ways.  This plot shows the daily profit distribution by agent type (row), and the number of order book imbalance agents (row), number of momentum agents (color), and number of noise agents (x-axis of each subplot).
+
+![Complex distribution plot of agent performance.](https://tildesites.bowdoin.edu/~d.byrd/images/bg_perf_agent_obi_mom.png)
+
+### Descriptive statistics table
+minabides also automatically generates descriptive statistics for an experiment, or a large batch of experiments.  Parameters allow grouping by any one or more logged hyperparameters, for example: action interval, agent type, learning rate, or training mode.
 ![Agent performance descriptive statistics.](https://tildesites.bowdoin.edu/~d.byrd/images/perf_table.png)
+
