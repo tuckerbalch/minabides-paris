@@ -5,6 +5,8 @@ Nasdaq order stream.
 
 minabides is intended as a powerful but straightforward jumping off point for experimentation with deep reinforcement learning in an interactive historical financial market simulation.  It should be robust enough for peer-reviewed research but simple enough for use in an AI, ML, or computational finance course.
 
+Examples of the plots and tables minabides can produce are at the bottom of the page.
+
 ## Partial feature list
 Particularly when contrasted to ABIDES, minabides has several distinct features:
 * Full Nasdaq order replay to the simulated exchange
@@ -82,3 +84,10 @@ limit order book is reconstructed in the exchange.
 
 ## Statement of AI use
 The minabides project, including its code, comments, and documentation, was produced entirely without the use of any LLM, Copilot, advanced auto-completion, or other Generative AI.  (It was written in vi on a server running Rocky Linux.)
+
+## Example output
+Here are a few examples of the tables and images minabides can produce out of the box:
+![100 order book levels over one hour at one second interval.](https://tildesites.bowdoin.edu/~d.byrd/images/replay_100_small.png)
+![10 order book levels over one minute at one millisecond interval.](https://tildesites.bowdoin.edu/~d.byrd/images/replay_10_small.png)
+![TD3 actor-critic loss convergence.](https://tildesites.bowdoin.edu/~d.byrd/images/loss_small.png)
+![Agent performance descriptive statistics.](https://tildesites.bowdoin.edu/~d.byrd/images/perf_table.png)
