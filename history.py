@@ -8,11 +8,13 @@ class History:
         to the simulation kernel. It can also cache a starting point to
         permit future fast-forwarding to a previously used start time. """
 
-    def __init__ (self, symbol, date, start, data_dir):
+    def __init__ (self, symbol, date, start, replay, fund_type, data_dir):
 
         self.symbol = symbol
         self.date = date
         self.start = start
+        self.replay = replay
+        self.fund_type = fund_type
         self.fund = None
 
         year = date[:4]
@@ -59,11 +61,17 @@ class History:
             # During history replay, fundamental is simply the most recently
             # executed real-world trade (not simulated market).
             # Could change to bayesian VWAP of executed trades or similar.
-            if n[1] in (4,5): self.fund = n[4]
+            # Fixed fundamental retains the value of the first executed trade.
+            if n[1] in (4,5):
+                if self.fund_type == 'history': self.fund = n[4]
+                elif self.fund_type == 'fixed' and self.fund is None: self.fund = n[4]
 
-            otype = 'place'
-            if n[1] == 2: otype = 'reduce'
-            elif n[1] == 3: otype = 'cancel'
+            if self.replay:
+                otype = 'place'
+                if n[1] == 2: otype = 'reduce'
+                elif n[1] == 3: otype = 'cancel'
+            else:
+                otype = 'fund'
 
             # Execute orders are given a new oid, other types pass through oid.
             o = Order(-1, n[3] if n[5] > 0 else -n[3], self.symbol, n[4], oid = None if n[1] in (4,5) else n[2])
@@ -95,7 +103,11 @@ class History:
             n = self.next
             if n[0] >= et: break
     
-            if n[1] == 4: book.fund = n[4]
+            # Visible or hidden execution becomes the new fundamental, unless fixed.
+            if n[1] in (4,5):
+                if self.fund_type == 'history': book.fund = n[4]
+                elif self.fund_type == 'fixed' and book.fund is None: book.fund = n[4]
+
             o = Order(-1, n[3] if n[5] > 0 else -n[3], self.symbol, n[4], oid = n[2])
     
             if n[1] in [1,2,3,4]: book.ct = n[0]    # update book's last order time

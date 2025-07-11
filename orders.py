@@ -243,7 +243,7 @@ class OrderBook:
         """ Return the order book snapshot waiting to be logged, if any. """
         if self.book_to_log is None: return None
 
-        to_log = self.book_to_log + self.last_trade
+        to_log = self.book_to_log + self.last_trade + [self.fund]
         self.book_to_log = None
         return to_log
 

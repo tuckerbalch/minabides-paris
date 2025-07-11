@@ -70,7 +70,7 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
     if sim == 0:
         log_header(simulate.book_log,  ['time'] + [ f'{a}_{i}_{p}' for i in range(args.levels)
                                                     for a in ['ask','bid'] for p in ['p','q'] ] +
-                                       ['trade_price','trade_quantity'])
+                                       ['trade_price','trade_quantity','fundamental'])
         log_header(simulate.loss_log,  ['episode','episode_step','global_step','actor_loss','critic_loss'])
         log_header(simulate.perf_log,  ['mps','profit'])
 
@@ -91,7 +91,7 @@ def simulate (sim, model, date, trip, mode, ag_start, end, base_ag, learn_ag, ar
     pq = []
     schedule.pq = pq
     msg_from_ag = { i:0 for i in range(len(ag)) }
-    hist = History(args.symbol, date, args.sim_start, args.datadir)
+    hist = History(args.symbol, date, args.sim_start, not args.no_replay, args.fund, args.datadir)
     cachefile = os.path.join(args.datadir, "cached", f"cache_{args.symbol}_{date}_{ag_start}_"
                                                      f"{args.lobintvl}_{args.seqlen}_{args.levels}")
 

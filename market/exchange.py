@@ -46,7 +46,8 @@ class ExchangeAgent(Agent):
         if order.aid < 0 and 'fund' in msg: book.fund = msg['fund']
 
         # Handle the order
-        if mtype == 'place':
+        if mtype == 'fund': pass
+        elif mtype == 'place':
             matching = True
 
             while matching:
