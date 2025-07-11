@@ -3,6 +3,7 @@
 """
 
 from market.agent import TradingAgent
+from math import ceil, floor
 from random import random, randint, gauss
 from statistics import mean
 from util import ft, sign
@@ -31,24 +32,27 @@ class MomentumAgent(TradingAgent):
 class MarketMakerAgent(TradingAgent):
     """ Simple market maker that places a ladder around the mid-price. """
 
-    def __init__ (self, symbol, minlat, interval, lot):
+    def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire'):
         super().__init__(symbol, minlat, interval, lot=lot, offset=1e9)
-        self.done = False
+        self.spread, self.strategy, self.done = spread, strategy, False
 
     def message (self, ct, msg):
         super().message(ct, msg)
         if msg['type'] == 'lob':
             # Market maker agents cancel existing orders and place new ones near the mid.
+            # Note: maintains a one unit spread.  A smarter agent would vary this.
             # Implementation option one: actually cancel and replace.  Slows simulation a bit.
-            # Consider adding exchange "ladder" functionality to remove slowdown.
-            for x in self.cancel_all(): yield x
-            for i in range(4): yield self.place(self.lot, self.bid - i)
-            for i in range(4): yield self.place(-self.lot, self.ask + i)
+            if self.strategy == 'cancel':
+                to_cancel = self.cancel_all()
+                for i in range(4): yield self.place(self.lot, ceil(self.mid)-i-self.spread)
+                for i in range(4): yield self.place(-self.lot, floor(self.mid)+i+self.spread)
+                for x in to_cancel: yield x
 
             # Implementation option two: Submit orders that expire about the time our next
             #                            orders should arrive.  Lower impact on simulation speed.
-            #for i in range(4): yield self.place(self.lot, self.bid - i, exp=ct+1e6+2e3)
-            #for i in range(4): yield self.place(-self.lot, self.ask + i, exp=ct+1e6+2e3)
+            elif self.strategy == 'expire':
+                for i in range(4): yield self.place(self.lot, ceil(self.mid)-i-self.spread, exp=ct+1.1*self.interval)
+                for i in range(4): yield self.place(-self.lot, floor(self.mid)+i+self.spread, exp=ct+1.1*self.interval)
 
 
 class NoiseAgent(TradingAgent):
@@ -119,9 +123,9 @@ class OrderBookImbalanceAgent(TradingAgent):
 class ValueAgent(TradingAgent):
     """ Simple value agent that arbitrages the market towards the fundamental. """
 
-    def __init__ (self, symbol, minlat, interval, lot):
+    def __init__ (self, symbol, minlat, interval, lot, noise=5, alpha=1.0):
         super().__init__(symbol, minlat, interval, lot=lot, offset=6e10)
-        self.alpha, self.priv, self.surplus = 0.1, None, randint(5,100)
+        self.alpha, self.noise, self.priv = alpha, noise, None
 
     def message (self, ct, msg):
         super().message(ct, msg)
@@ -130,15 +134,23 @@ class ValueAgent(TradingAgent):
 
             # Simple value agent updates belief, then arbs towards belief.
             # Consider changing scale of noise with price level.
-            if self.priv is None: self.priv = int(fund + gauss()*100)
-            else: self.priv += int(self.alpha * ((fund + gauss()*100) - self.priv))
+            if self.priv is None: self.priv = int(fund + gauss()*self.noise)
+            else: self.priv += int(self.alpha * ((fund + gauss()*self.noise) - self.priv))
 
-            # Only trade if mid -> priv movement would be at least surplus.
-            # Consider changing from mid to price-to-pay (best bid or ask).
-            # Right now these are liquidity takers.  Could be providers.
             delta = self.priv - self.mid
-            if abs(delta) < self.surplus: q = 0
+            if delta == 0: return    # mid-price equals private valuation
             else: q = self.lot * sign(delta)
 
-            for m in self.adjust(q, None): yield m
+            # Chance: 1/3 join top of book, 1/3 limit at mid, 1/3 take market price.
+            price = None
+            orand = random()
+            if orand < 0.333:
+                if q < 0: price = self.ask              # join best ask
+                else:     price = self.bid              # join best bid
+            elif orand < 0.666: price = int(self.mid)   # limit at mid-price
+            else: pass                                  # take market price
+
+            # Cancel old orders and place new.
+            for x in self.cancel_all(): yield x
+            yield self.place(q, price)
 
