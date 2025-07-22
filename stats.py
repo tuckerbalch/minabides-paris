@@ -89,6 +89,8 @@ parser.add_argument('-l', '--logs', nargs='+', default=['book','loss','perf'], m
                     help='Process and report/plot only these kinds of logs.')
 parser.add_argument('-n', '--every_n', type=int, default=1, metavar='BOOK_EVERY_N',
                     help='For book plot, use every Nth update (i.e. lower the frequency for the plot).')
+parser.add_argument('-s', '--summary', action='store_true',
+                    help='Include only mean, std, and median in descriptive statistics.')
 parser.add_argument('-x', '--x_var', default=None, metavar='COLUMN_NAME',
                     help='This column will be the x-axis of each plot.  The y-axis is always profit.  '
                          'Affects plot only.  Optional but usually recommended.')
@@ -114,7 +116,9 @@ if 'perf' in args.logs:
 
     # Print stats distribution grouped by requested columns, showing profit.
     # Usually want to include mode to avoid mixing training and testing results.
-    print(df_perf.groupby(args.columns)['profit'].describe())
+    df_print = df_perf.groupby(args.columns)['profit'].describe()
+    if args.summary: print(df_print[['count','mean','std','50%']])
+    else: print(df_print)
 
     # Write the same information to a CSV in the analysis directory.
     df_perf.groupby(args.columns)['profit'].describe().to_csv(os.path.join(outdir, "stats.csv"))

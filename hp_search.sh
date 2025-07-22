@@ -52,6 +52,8 @@ for lobintvl in 5e9; do		# ALL: how often to update LOB snapshots (and log)
 for seqlen in 20; do		# ALL: how many recent LOB snapshots to offer agents
 for symbol in AAPL; do		# ALL: one symbol per simulation
 for trip in 1; do		# ALL: trips through training period
+for replay in yes; do           # ALL: replay historical orders after agent start? (yes, no)
+for fund in history; do		# ALL: fundamental value series, fixed or history?
 
 for bg_mkt in 0; do		# BG: how many market makers?
 for bg_mom in 0; do		# BG: how many momentum traders?
@@ -75,14 +77,20 @@ for polfreq in 10; do		# TD3: policy update frequency (in steps)
 for trainfreq in 5; do		# DQN: training frequency (in steps)
 for targetfreq in 40; do	# DQN: target update frequenct (in steps)
 
+for num_steps in 30; do         # PPO: steps per policy rollout
+for gae_lambda in 0.85; do      # PPO: lambda for general advantage estimation
+for num_minibatches in 4; do    # PPO: number of minibatches per training epoch
+for update_epochs in 8; do 	# PPO: number of training epochs per batch
+
     # Example reinforcement learning experiment.
-    srun -u --exclusive=user --mem-per-cpu 5GB -N1 -n1 /usr/bin/time -v python -u run_exp.py --exp rl --rlagent $rlagent --expnoise $expnoise --polnoise $polnoise --polfreq $polfreq --train_freq $trainfreq --target_freq $targetfreq --train_dates $date --val_dates $date --test_dates $date --symbol $symbol --bg_mkt $bg_mkt --bg_mom $bg_mom --bg_nse $bg_nse --bg_obi $bg_obi --bg_val $bg_val --lr $lr --fixed --models $model --trips $trip --seqlen $seqlen --lobintvl $lobintvl --levels $level --trade $trade --encoder $encoder --embed $embed --tau $tau --trans_cost $transcost --ts $ts --tag $usertag --runtag "${symbol}_${repeat}_${tasknum}" &
+    srun -u --exclusive=user --mem-per-cpu 5GB -N1 -n1 /usr/bin/time -v python -u run_exp.py --exp rl --rlagent $rlagent --expnoise $expnoise --polnoise $polnoise --polfreq $polfreq --train_freq $trainfreq --target_freq $targetfreq --num_steps $num_steps --gae_lambda $gae_lambda --num_minibatches $num_minibatches --update_epochs $update_epochs --train_dates $date --val_dates $date --test_dates $date --symbol $symbol --bg_mkt $bg_mkt --bg_mom $bg_mom --bg_nse $bg_nse --bg_obi $bg_obi --bg_val $bg_val --lr $lr --fixed --models $model --trips $trip --replay $replay --fund $fund --seqlen $seqlen --lobintvl $lobintvl --levels $level --trade $trade --encoder $encoder --embed $embed --tau $tau --trans_cost $transcost --ts $ts --tag $usertag --runtag "${symbol}_${repeat}_${tasknum}" &
 
     tasknum=$((tasknum + 1))
 
 done; done; done; done; done; done; done; done; done; done
 done; done; done; done; done; done; done; done; done; done
-done; done; done; done; done
+done; done; done; done; done; done; done; done; done; done
+done
 
 wait
 echo Done.

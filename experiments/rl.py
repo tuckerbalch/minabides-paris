@@ -37,6 +37,7 @@ def experiment(base_args, exp_args):
     from market.exchange import ExchangeAgent
     from rl.ddpg_td3 import DDPGAgent
     from rl.dqn import DQNAgent
+    from rl.ppo import PPOAgent
     from simulation import run_experiment
 
     # Read experiment-specific command-line parameters.
@@ -120,6 +121,17 @@ def experiment(base_args, exp_args):
     dqn_group.add_argument('--target_freq', type=int, default=40, metavar='INT',
                            help='Interval for target updates.')
 
+    # Parameters only applicable to PPO.
+    ppo_group = parser.add_argument_group('Parameters specific to PPO.')
+    ppo_group.add_argument('--num_steps', type=int, default=8, metavar='INT',
+                           help='Number of steps per policy rollout.')
+    ppo_group.add_argument('--gae_lambda', type=float, default=0.95, metavar='FLOAT',
+                           help='Lambda for general advantage estimation.')
+    ppo_group.add_argument('--num_minibatches', type=int, default=4, metavar='INT',
+                           help='Number of mini-batches.')
+    ppo_group.add_argument('--update_epochs', type=int, default=4, metavar='INT',
+                           help='Number of training updates per batch/rollout.')
+
     # Parse the remaining experimental arguments not handled by run_exp.
     # Combine the basic and experimental arguments to a single namespace.
     exp_args = parser.parse_args(exp_args)
@@ -129,11 +141,11 @@ def experiment(base_args, exp_args):
     # "Base" agents are those always present for this experiment.
 
     base_ag = [ ExchangeAgent([args.symbol], args) ] + \
-              [ MarketMakerAgent(args.symbol, 1e1, 2e8, 100) for i in range(args.bg_mkt)] + \
+              [ MarketMakerAgent(args.symbol, 1e1, 1e8, 100, spread=1) for i in range(args.bg_mkt)] + \
               [ MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(args.bg_mom)] + \
-              [ NoiseAgent(args.symbol, 12e6, 10e9) for i in range(args.bg_nse)] + \
+              [ NoiseAgent(args.symbol, 12e6, 1e9) for i in range(args.bg_nse)] + \
               [ OrderBookImbalanceAgent(args.symbol, 1e3, 2e8, 100, 50) for i in range(args.bg_obi)] + \
-              [ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(args.bg_val)]
+              [ ValueAgent(args.symbol, 3e6, 1e9, 100) for i in range(args.bg_val)]
 
     # Configure the learning agents for the experiment.  They are separated out
     # because only one is included in each simulated day.  (args.models models
@@ -159,6 +171,9 @@ def experiment(base_args, exp_args):
             if args.rlagent == 'dqn':
                 num_act = 3
                 a = DQNAgent(args, obs_low, obs_high, num_act)
+            elif args.rlagent == 'ppo':
+                num_act = 3
+                a = PPOAgent(args, obs_low, obs_high, num_act)
             elif args.rlagent in ['ddpg','td3']:
                 act_low, act_high = np.array([-2.0]), np.array([2.0])
                 a = DDPGAgent(args, obs_low, obs_high, act_low, act_high)

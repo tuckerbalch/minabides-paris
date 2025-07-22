@@ -33,8 +33,8 @@ basic_group.add_argument('--trips', type=int, default=1, metavar='INT',
                               'validating/testing.')
 basic_group.add_argument('--fixed', action='store_true',
                          help='Retain first episode random start time offset across episodes.')
-basic_group.add_argument('--no_replay', action='store_true',
-                         help='After agent start time, do not replay historical orders.')
+basic_group.add_argument('--replay', default='yes', metavar='YES_NO',
+                         help='After agent start time, should historical orders be replayed to the exchange?')
 basic_group.add_argument('--fund', default='history', metavar='FUND_TYPE',
                          help='Fundamental price-time series: fixed, history.')
 
