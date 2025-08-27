@@ -28,6 +28,53 @@ class MomentumAgent(TradingAgent):
 
             self.prevmids = ([self.mid] + self.prevmids)[:self.n_pm]
 
+class MarketMakerAgent_AS(TradingAgent):
+    """ implementation of inventory aware Avelleneda-Stoikof MM that places a ladder around the mid-price. """
+
+    def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire'):
+        super().__init__(symbol, minlat, interval, lot=lot, offset=1e9)
+        self.spread, self.strategy, self.done = spread, strategy, False
+        print(f"MM_AS init {self.symbol} at init: mid {self.mid}, spread {self.spread} strategy {self.strategy}")
+        self.inventory = 100
+
+    def message (self, ct, msg):
+        super().message(ct, msg)
+        print(f"MM_AS {self.symbol} at {ft(ct)}: type {msg['type']}")
+        
+        if msg['type'] == 'lob':
+            # Market maker agents cancel existing orders and place new ones near the mid.
+            # Note: maintains a one unit spread.  A smarter agent would vary this.
+            # Implementation option one: actually cancel and replace.  Slows simulation a bit.
+
+            mid = self.mid
+            half_spread = self.spread // 2
+            k = 0.0001
+            #k = 0.0
+            q = self.held 
+
+            mm_bid = mid - half_spread - k * q
+            mm_ask = mid + half_spread - k * q
+
+            # Add some sanity contraints
+            # Ensure mm_bid and mm_ask are within the current best bid and ask
+            #if mm_bid < self.bid: mm_bid = self.bid
+            #if mm_ask > self.ask: mm_ask = self.ask
+            #if mm_ask < mm_bid: mm_ask = mm_bid
+
+            print(f"MM_AS {self.symbol} at {ft(self.ct)}: mid {self.mid}, mm_bid {mm_bid}, mm_ask {mm_ask}, spread {self.spread}, held {self.held}, open {self.open}, cash {self.cash}, portval {self.portval}")
+
+            if self.strategy == 'cancel':
+                to_cancel = self.cancel_all()
+                for i in range(4): yield self.place(self.lot, ceil(mm_bid)-i-self.spread)
+                for i in range(4): yield self.place(-self.lot, floor(mm_ask)+i+self.spread)
+                for x in to_cancel: yield x
+
+            # Implementation option two: Submit orders that expire about the time our next
+            #                            orders should arrive.  Lower impact on simulation speed.
+            elif self.strategy == 'expire':
+                for i in range(4): yield self.place(self.lot, ceil(mm_bid)-i-self.spread, exp=ct+1.1*self.interval)
+                for i in range(4): yield self.place(-self.lot, floor(mm_ask)+i+self.spread, exp=ct+1.1*self.interval)
+
 
 class MarketMakerAgent(TradingAgent):
     """ Simple market maker that places a ladder around the mid-price. """
@@ -35,13 +82,18 @@ class MarketMakerAgent(TradingAgent):
     def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire'):
         super().__init__(symbol, minlat, interval, lot=lot, offset=1e9)
         self.spread, self.strategy, self.done = spread, strategy, False
+        self.inventory = 100
 
     def message (self, ct, msg):
         super().message(ct, msg)
+
         if msg['type'] == 'lob':
             # Market maker agents cancel existing orders and place new ones near the mid.
             # Note: maintains a one unit spread.  A smarter agent would vary this.
             # Implementation option one: actually cancel and replace.  Slows simulation a bit.
+
+            print(f"MM {self.symbol} at {ft(self.ct)}: mid {self.mid}, spread {self.spread}")
+
             if self.strategy == 'cancel':
                 to_cancel = self.cancel_all()
                 for i in range(4): yield self.place(self.lot, ceil(self.mid)-i-self.spread)
