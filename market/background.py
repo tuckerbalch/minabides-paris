@@ -65,15 +65,15 @@ class MarketMakerAgent_AS(TradingAgent):
 
             if self.strategy == 'cancel':
                 to_cancel = self.cancel_all()
-                for i in range(4): yield self.place(self.lot, ceil(mm_bid)-i-self.spread)
-                for i in range(4): yield self.place(-self.lot, floor(mm_ask)+i+self.spread)
+                for i in range(6): yield self.place(self.lot, ceil(mm_bid)-i-self.spread)
+                for i in range(6): yield self.place(-self.lot, floor(mm_ask)+i+self.spread)
                 for x in to_cancel: yield x
 
             # Implementation option two: Submit orders that expire about the time our next
             #                            orders should arrive.  Lower impact on simulation speed.
             elif self.strategy == 'expire':
-                for i in range(4): yield self.place(self.lot, ceil(mm_bid)-i-self.spread, exp=ct+1.1*self.interval)
-                for i in range(4): yield self.place(-self.lot, floor(mm_ask)+i+self.spread, exp=ct+1.1*self.interval)
+                for i in range(6): yield self.place(self.lot, ceil(mm_bid)-i-self.spread, exp=ct+1.1*self.interval)
+                for i in range(6): yield self.place(-self.lot, floor(mm_ask)+i+self.spread, exp=ct+1.1*self.interval)
 
 
 class MarketMakerAgent(TradingAgent):
@@ -96,15 +96,15 @@ class MarketMakerAgent(TradingAgent):
 
             if self.strategy == 'cancel':
                 to_cancel = self.cancel_all()
-                for i in range(4): yield self.place(self.lot, ceil(self.mid)-i-self.spread)
-                for i in range(4): yield self.place(-self.lot, floor(self.mid)+i+self.spread)
+                for i in range(6): yield self.place(self.lot, ceil(self.mid)-i-self.spread)
+                for i in range(6): yield self.place(-self.lot, floor(self.mid)+i+self.spread)
                 for x in to_cancel: yield x
 
             # Implementation option two: Submit orders that expire about the time our next
             #                            orders should arrive.  Lower impact on simulation speed.
             elif self.strategy == 'expire':
-                for i in range(4): yield self.place(self.lot, ceil(self.mid)-i-self.spread, exp=ct+1.1*self.interval)
-                for i in range(4): yield self.place(-self.lot, floor(self.mid)+i+self.spread, exp=ct+1.1*self.interval)
+                for i in range(6): yield self.place(self.lot, ceil(self.mid)-i-self.spread, exp=ct+1.1*self.interval)
+                for i in range(6): yield self.place(-self.lot, floor(self.mid)+i+self.spread, exp=ct+1.1*self.interval)
 
 
 class NoiseAgent(TradingAgent):
