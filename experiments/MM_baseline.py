@@ -45,7 +45,7 @@ def experiment(base_args, exp_args):
     # These are the baseline configuration of agents that work well with
     # our MM experiments.
     base_ag = [ ExchangeAgent([args.symbol], args) ] + \
-        [ MarketMakerAgent_AS(args.symbol, 1e1, 2e8, 100, 10) ] + \
+        [ MarketMakerAgent_AS(args.symbol, 1e1, 2e8, 100) ] + \
         [ MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(5)] + \
         [ NoiseAgent(args.symbol, 12e6, 10e9) for i in range(10)] + \
         [ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(5)]
