@@ -31,9 +31,9 @@ class MomentumAgent(TradingAgent):
 class MarketMakerAgent_AS(TradingAgent):
     """ implementation of inventory aware Avelleneda-Stoikof MM that places a ladder around the mid-price. """
 
-    def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire'):
+    def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire', OBI_aware=False):
         super().__init__(symbol, minlat, interval, lot=lot, offset=1e9)
-        self.spread, self.strategy, self.done = spread, strategy, False
+        self.spread, self.strategy, self.done, self.OBI_aware= spread, strategy, False, False
         print(f"MM_AS init {self.symbol} at init: mid {self.mid}, spread {self.spread} strategy {self.strategy}")
         self.inventory = 100
 
@@ -47,6 +47,11 @@ class MarketMakerAgent_AS(TradingAgent):
             # Implementation option one: actually cancel and replace.  Slows simulation a bit.
 
             mid = self.mid
+
+            if self.OBI_aware:
+                print("hello")
+
+
             half_spread = self.spread // 2
             k = 0.0001
             #k = 0.0
