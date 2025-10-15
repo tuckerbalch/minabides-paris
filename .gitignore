@@ -174,3 +174,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 results/
+data/lobster/AAPL_2019-12-30_0_86399000_message_0.csv
