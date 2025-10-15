@@ -32,11 +32,11 @@ def seconds_to_hhmm(x, pos):
 
 def get_color_from_filename(filename):
     lower = filename.lower()
-    if "OUUP" in lower:
+    if "ouup" in lower:
         return "green"
-    elif "OUDN" in lower:
+    elif "oudn" in lower:
         return "red"
-    elif "OULVL" in lower:
+    elif "oulvl" in lower:
         return "blue"
     else:
         return "gray"
