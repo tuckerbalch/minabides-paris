@@ -33,13 +33,13 @@ class MarketMakerAgent_AS(TradingAgent):
 
     def __init__ (self, symbol, minlat, interval, lot, spread=1, strategy='expire', OBI_aware=False):
         super().__init__(symbol, minlat, interval, lot=lot, offset=1e9)
-        self.spread, self.strategy, self.done, self.OBI_aware= spread, strategy, False, False
+        self.spread, self.strategy, self.done, self.OBI_aware = spread, strategy, False, OBI_aware
         print(f"MM_AS init {self.symbol} at init: mid {self.mid}, spread {self.spread} strategy {self.strategy}")
         self.inventory = 100
 
     def message (self, ct, msg):
         super().message(ct, msg)
-        print(f"MM_AS {self.symbol} at {ft(ct)}: type {msg['type']}")
+        #print(f"MM_AS {self.symbol} at {ft(ct)}: type {msg['type']}")
         
         if msg['type'] == 'lob':
             # Market maker agents cancel existing orders and place new ones near the mid.
@@ -49,8 +49,21 @@ class MarketMakerAgent_AS(TradingAgent):
             mid = self.mid
 
             if self.OBI_aware:
-                print("hello")
-
+                best_levels = 10
+                total_bid_volume = sum(self.snap['bid'][i].quantity for i in range(min(best_levels, len(self.snap['bid']))))
+                total_ask_volume = sum(self.snap['ask'][i].quantity for i in range(min(best_levels, len(self.snap['ask']))))
+                print(f"Total bid volume at top {best_levels} levels: {total_bid_volume}")
+                print(f"Total ask volume at top {best_levels} levels: {total_ask_volume}")
+                    # Compute imbalance as (bid_size - ask_size) / (bid_size + ask_size)
+                if (total_bid_volume + total_ask_volume) > 0:
+                    imbalance = (total_bid_volume - total_ask_volume) / (total_bid_volume + total_ask_volume)
+                else:
+                    imbalance = 0.0
+                print(f"Order book imbalance at top {best_levels} levels: {imbalance:.3f}")
+                                # Compute micro_price
+                micro_price = 0.5 * (1 + imbalance) * self.ask + 0.5 * (1 - imbalance) * self.bid
+                print(f"Micro price: {micro_price:.2f}")
+                self.mid = micro_price
 
             half_spread = self.spread // 2
             k = 0.0001
@@ -97,7 +110,7 @@ class MarketMakerAgent(TradingAgent):
             # Note: maintains a one unit spread.  A smarter agent would vary this.
             # Implementation option one: actually cancel and replace.  Slows simulation a bit.
 
-            print(f"MM {self.symbol} at {ft(self.ct)}: mid {self.mid}, spread {self.spread}")
+            #print(f"MM {self.symbol} at {ft(self.ct)}: mid {self.mid}, spread {self.spread}")
 
             if self.strategy == 'cancel':
                 to_cancel = self.cancel_all()
@@ -210,4 +223,32 @@ class ValueAgent(TradingAgent):
             # Cancel old orders and place new.
             for x in self.cancel_all(): yield x
             yield self.place(q, price)
+
+class SpoofAgent(TradingAgent):
+    """ Agent that spoofs the market by placing large orders on one side and smaller orders on the other. """
+
+    def __init__ (self, symbol, minlat, interval, latent_size=100, spoof_size=1000, latent_offset=3, spoof_offset=8):
+        super().__init__(symbol, minlat, interval, lot=latent_size, offset=1e9)
+        self.latent_size = latent_size
+        self.spoof_size = spoof_size
+        self.latent_offset = latent_offset  # Close to the spread
+        self.spoof_offset = spoof_offset    # Further away
+        self.done = False
+
+    def message (self, ct, msg):
+        super().message(ct, msg)
+        
+        if msg['type'] == 'lob':
+            # Cancel any existing orders first
+            for x in self.cancel_all(): yield x
+            
+            # Place a small sell order (latent order) close to the ask
+            latent_price = self.ask + self.latent_offset
+            yield self.place(-self.latent_size, latent_price, exp=ct+1.1*self.interval)
+            
+            # Place a large buy order (spoof order) further below the bid to create false demand
+            spoof_price = self.bid - self.spoof_offset
+            yield self.place(self.spoof_size, spoof_price, exp=ct+1.1*self.interval)
+            
+            print(f"Spoof {self.symbol} at {ft(ct)}: latent sell @ {latent_price} ({self.latent_size}), spoof buy @ {spoof_price} ({self.spoof_size})")
 

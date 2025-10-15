@@ -79,11 +79,15 @@ time_group.add_argument('--test_start', type=float, default=11.50, metavar='FLOA
 time_group.add_argument('--test_end', type=float, default=12.00, metavar='FLOAT',
                         help='End time for the simulation on each date during testing.')
 
+
 args, exp_args = parser.parse_known_args()
 
 # Create a results subdirectory for the experiment with the tag and a unique timestamp.
 # For batches, timestamp can be passed in to ensure all files flow to one place.
 run_ts = args.ts if args.ts is not None else str(int(time.time()))
+
+print(f"Experiment: {args.exp}, tag: {args.tag}, timestamp: {run_ts}")
+
 args.result_dir = f"results/{args.tag}_{run_ts}"
 os.makedirs(args.result_dir, exist_ok=True)
 

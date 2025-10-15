@@ -32,7 +32,7 @@ def experiment(base_args, exp_args):
 
     # Custom imports from this project.
     from market.background import MarketMakerAgent_AS, MarketMakerAgent, MomentumAgent, NoiseAgent, \
-                                  OrderBookImbalanceAgent, ValueAgent
+                                  OrderBookImbalanceAgent, ValueAgent, SpoofAgent
     from market.exchange import ExchangeAgent
     from simulation import run_experiment
 
@@ -45,12 +45,18 @@ def experiment(base_args, exp_args):
     # These are the baseline configuration of agents that work well with
     # our MM experiments.
     base_ag = [ ExchangeAgent([args.symbol], args) ] + \
-        [ MarketMakerAgent_AS(args.symbol, 1e1, 2e8, 100) ] + \
+       [ MarketMakerAgent_AS(args.symbol, 1e1, 2e8, 100, spread = 4, OBI_aware=True)] + \
         [ MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(5)] + \
         [ NoiseAgent(args.symbol, 12e6, 10e9) for i in range(10)] + \
-        [ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(5)]
+        [ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(5)] + \
+        [ SpoofAgent(args.symbol, 3e10, 20e10, 100) for i in range(1)]
     
-    # old, not used for now
+      #[ MarketMakerAgent(args.symbol, 1e1, 2e8, 100, spread = 8) ] + \
+       # [ MomentumAgent(args.symbol, 5e6, 1e9, 100) for i in range(5)] + \
+       # [ NoiseAgent(args.symbol, 12e6, 10e9) for i in range(10)] + \
+       # [ ValueAgent(args.symbol, 3e6, 5e8, 100) for i in range(5)]
+    
+        # old, not used for now
     # [ OrderBookImbalanceAgent(args.symbol, 1e3, 2e8, 100, 50) for i in range(5)] + \
 
   #[ MarketMakerAgent(args.symbol, 1e1, 2e8, 100, 10) ] + \
