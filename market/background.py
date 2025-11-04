@@ -67,11 +67,15 @@ class MarketMakerAgent_AS(TradingAgent):
 
             half_spread = self.half_spread
             k = 0.0001
-            #k = 0.0
             q = self.held 
 
-            mm_bid = mid - half_spread - k * q
-            mm_ask = mid + half_spread - k * q
+            skew = half_spread * sign(q)    
+
+            mm_bid = mid - half_spread - skew
+            mm_ask = mid + half_spread - skew
+
+            # mm_bid = mid - half_spread - k * q
+            # mm_ask = mid + half_spread - k * q
 
             # Add some sanity contraints
             # Ensure mm_bid and mm_ask are within the current best bid and ask
